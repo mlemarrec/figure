@@ -33,13 +33,26 @@ The project is organized as follows:
     cd figurine_finder
     ```
 
-2.  **Create and activate a virtual environment (recommended):**
+2.  **Create a Python virtual environment:**
+    It is highly recommended to use a virtual environment to manage project dependencies.
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    python3 -m venv venv
     ```
 
-3.  **Install dependencies:**
+3.  **Activate the virtual environment:**
+
+    *   **On Linux/macOS:**
+        ```bash
+        source venv/bin/activate
+        ```
+
+    *   **On Windows (PowerShell or cmd.exe):**
+        ```bash
+        .\venv\Scripts\activate
+        ```
+
+4.  **Install dependencies:**
+    Once the virtual environment is activated, install the required packages:
     ```bash
     pip install -r requirements.txt
     ```
