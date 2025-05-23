@@ -37,7 +37,7 @@ def ensure_model_not_loaded_for_tests():
     # However, TestClient(app) should call startup events. If main.model is global,
     # we might need a more sophisticated way to reset it or ensure the app's state.
     # For now, we rely on TestClient's behavior and the fact that `main.model` is global
-    # and set during `load_model_on_startup`.
+    # and set during `load_dependencies_on_startup`.
 
 client = TestClient(app)
 
@@ -45,7 +45,11 @@ def test_read_root():
     """Test the root GET endpoint."""
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Welcome to the Figurine Classifier API!"}
+    # Check for the expected keys, as content may vary (e.g. available_classes)
+    assert "message" in response.json()
+    assert "model_loaded" in response.json()
+    assert "class_labels_loaded" in response.json()
+
 
 def test_predict_endpoint_model_not_loaded():
     """
@@ -73,9 +77,16 @@ def test_predict_endpoint_invalid_image_file_if_model_were_loaded(monkeypatch):
     # This is to bypass the "model not loaded" check and test deeper.
     class MockModel:
         def predict(self, data):
-            return [[0.9]] # Dummy prediction
+            # For binary classification, this was [[0.9]]
+            # For multi-class, it would be something like [[0.1, 0.8, 0.1]]
+            return [[0.1, 0.8, 0.1]] 
+
+    # Mock class_labels as well for this test to pass the class_labels check
+    mock_class_labels = {0: "class_A", 1: "class_B", 2: "class_C"}
 
     monkeypatch.setattr("figurine_finder.app.main.model", MockModel())
+    monkeypatch.setattr("figurine_finder.app.main.class_labels", mock_class_labels)
+
 
     # Create an invalid image file (e.g., a text file)
     invalid_file_content = b"this is not an image"
@@ -104,3 +115,93 @@ def test_predict_endpoint_invalid_image_file_if_model_were_loaded(monkeypatch):
 # directory, so that `from figurine_finder.app.main import app` works correctly.
 # Alternatively, structure as a package and install with `pip install -e .`
 # then `pytest` should work from anywhere.
+
+# --- Comments for Future Multi-Class API Testing ---
+
+# 1. Mocking a Multi-Class Model and `class_indices.json`:
+#    To effectively test the multi-class capabilities of the `/predict/` endpoint,
+#    we need to simulate a scenario where a multi-class model and its corresponding
+#    `class_indices.json` are loaded.
+#
+#    Considerations for test setup:
+#    -   **Mock Keras Model (`.h5`):**
+#        *   A fixture could create a temporary dummy `.h5` file representing a
+#          trained Keras model. This model should be configured to output a
+#          multi-class prediction array (e.g., a softmax output like `[[0.1, 0.7, 0.2]]`).
+#        *   Tools like `h5py` might be useful for creating a valid HDF5 file that
+#          Keras `load_model` can parse, or more simply, `monkeypatch` `tf.keras.models.load_model`
+#          to return a mock model object directly.
+#
+#    -   **Mock `class_indices.json`:**
+#        *   A corresponding `class_indices.json` file needs to be created in the
+#          `model/` directory (or wherever `CLASS_INDICES_PATH` points).
+#        *   This JSON file should map class names to integer indices that align
+#          with the output of the mock Keras model. For example:
+#          `{"class_A": 0, "class_B": 1, "class_C": 2}`
+#
+#    -   **Fixture Adaptation:**
+#        *   The existing `ensure_model_not_loaded_for_tests` fixture is designed
+#          to test the "model not found" scenario.
+#        *   New fixtures will be needed to:
+#            a) Set up both a mock model file AND a mock `class_indices.json` file.
+#            b) Set up a mock model file BUT NOT `class_indices.json` (for error handling tests).
+#            c) Ensure these files are cleaned up after tests.
+#        *   Alternatively, use `monkeypatch` extensively to mock `os.path.exists`,
+#          `tf.keras.models.load_model`, and `json.load` within specific test functions.
+
+# 2. Testing the `/predict/` Endpoint with Multi-Class Output:
+#    Assuming the mock model and class indices are set up by a fixture or monkeypatching.
+#
+#    Example test case outline:
+#    def test_predict_multi_class_success():
+#        # Setup:
+#        # - Ensure a mock multi-class model is loaded (e.g., via monkeypatching main.model).
+#        # - Ensure mock class_labels are loaded (e.g., via monkeypatching main.class_labels).
+#        #   main.class_labels should be like {0: "class_A", 1: "class_B", ...}
+#
+#        # Create a valid dummy image file
+#        valid_image_content = b"dummy image data for multi-class" # Replace with actual image bytes if needed for preprocessing
+#        valid_file = ("valid_image.jpg", io.BytesIO(valid_image_content), "image/jpeg")
+#
+#        # Expected prediction from the mock model (e.g., class_B is highest)
+#        # mock_model.predict should return something like [[0.1, 0.8, 0.1]]
+#        # expected_figure_id = "class_B"
+#        # expected_confidence = 0.8
+#
+#        response = client.post("/predict/", files={"file": valid_file})
+#
+#        assert response.status_code == 200
+#        response_data = response.json()
+#        assert "figure_id" in response_data
+#        assert isinstance(response_data["figure_id"], str)
+#        # assert response_data["figure_id"] == expected_figure_id
+#        assert "confidence" in response_data
+#        assert isinstance(response_data["confidence"], float)
+#        # assert response_data["confidence"] == expected_confidence
+#        assert "filename" in response_data
+
+
+# 3. Testing Error Handling (if `class_indices.json` is missing):
+#    This tests the scenario where the model might be present, but the crucial
+#    `class_indices.json` file is missing or fails to load.
+#
+#    Example test case outline:
+#    def test_predict_class_indices_missing():
+#        # Setup:
+#        # - Ensure a mock model IS considered loaded (e.g., monkeypatch main.model).
+#        # - Ensure `class_labels` in `main.py` is `None` (e.g., by ensuring
+#        #   `CLASS_INDICES_PATH` does not exist and `load_dependencies_on_startup` is run,
+#        #   or by directly monkeypatching `main.class_labels` to `None`).
+#
+#        dummy_file_content = b"dummy image data"
+#        dummy_file = ("test_image.jpg", io.BytesIO(dummy_file_content), "image/jpeg")
+#
+#        response = client.post("/predict/", files={"file": dummy_file})
+#
+#        assert response.status_code == 503 # Service Unavailable
+#        assert response.json() == {"detail": "Class labels not loaded. Please ensure class_indices.json is available from training."}
+
+# Note: The `test_read_root` has been slightly modified to check for presence of keys
+# rather than exact message, as the `available_classes` part can change.
+# The `test_predict_endpoint_invalid_image_file_if_model_were_loaded` has been updated
+# to also mock `class_labels` for the test to pass the initial checks in `predict_image`.
