@@ -98,6 +98,19 @@ dataset/
 
 Common image formats like JPEG and PNG are generally supported. Ensure you have a good number of diverse images in each category (each figurine ID and the background class) for effective training.
 
+### Train/Validation Split
+
+When preparing your dataset, it's crucial to divide your images into training and validation sets. This split serves two main purposes:
+
+1.  **Performance Evaluation:** The validation set provides an objective way to assess how well your model is generalizing to new, unseen data.
+2.  **Overfitting Detection:** If the model performs exceptionally well on the training data but poorly on the validation data, it's a sign of overfitting (i.e., the model has memorized the training data but hasn't learned to generalize).
+
+**Recommendation:**
+A common practice is to allocate about 70-80% of your images for the `train` directory and the remaining 20-30% for the `validation` directory. For example, if you have 100 images of "figurine_id_A", you might put 70-80 images in `dataset/train/figurine_id_A/` and 20-30 images in `dataset/validation/figurine_id_A/`.
+
+**Consistency Across Classes:**
+It is important to maintain this split ratio consistently across all your classes. If you have multiple figurine IDs, each figurine's image set should be split in a similar ratio between the train and validation folders. This ensures that the validation set is a representative sample of all classes the model needs to learn.
+
 ## Training the Model
 
 Once you have populated the `dataset/` directory with your images, you need to train the classification model.
